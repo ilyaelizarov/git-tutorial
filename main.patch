@@ -1,0 +1,12 @@
+diff --git a/src/hello.c b/src/hello.c
+index 5a5fa1c..55805f1 100644
+--- a/src/hello.c
++++ b/src/hello.c
+@@ -2,5 +2,7 @@
+ 
+ int main(void) {
+ 	printf("Hello ESPL\n");
++
++	// returning successfully
+ 	return 0;
+ }
