@@ -57,11 +57,17 @@ typedef struct {
   int args[1];
   int verbose;
   int tick;
-} arguments_t:
+} arguments_t;
 
-void errno_abort(char *message) {
+void err_abort(char *message) {
   perror(message);
   exit(EXIT_FAILURE);
+}
+
+int errno_abort(int status, char *message) {
+  fprintf(stderr, "%s\n", message);
+  exit(status);
+  return 0;
 }
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state) {
@@ -96,19 +102,19 @@ void timer_callback(union sigval arg) {
 
   error = pthread_mutex_lock(&mutex);
   if (error != 0)
-    err_abort(error, "Callback locking");
+    errno_abort(error, "Callback locking");
 
   states_run();
 
   if (count >= count_to) {
     error = pthread_cond_signal(&cond); /** Signal condition fulfilled */
     if (error != 0)
-      err_abort(error, "Signal condition");
+      errno_abort(error, "Signal condition");
   }
 
   error = pthread_mutex_unlock(&mutex);
   if (error != 0)
-    err_abort(error, "Callback unlocking");
+    errno_abort(error, "Callback unlocking");
 }
 
 void create_timer(int tick) {
@@ -134,16 +140,16 @@ void create_timer(int tick) {
 
   error = timer_create(CLOCK_REALTIME, &se, &our_timer); /** Create timer */
   if (error == -1)
-    errno_abort("Creating timer");
+    err_abort("Creating timer");
 
   error =
       timer_settime(our_timer, 0, &timer_specs, 0); /** Set timer interval */
   if (error == -1)
-    errno_abort("Setting timer");
+    err_abort("Setting timer");
 }
 
 void statemachine_callback(void) {
-  my_states_data **cur_data = states_get_data();
+  my_states_data *cur_data = states_get_data();
 
   int diff = cur_data->cur_val - cur_data->prev_val;
 
@@ -156,6 +162,7 @@ void statemachine_callback(void) {
   states_set_state(rand() %
                    states_get_state_count()); /** Switch to random next state */
 }
+
 
 int main(int argc, char **argv) {
   int error;
@@ -175,12 +182,12 @@ int main(int argc, char **argv) {
          arguments.verbose ? "yes" : "no", arguments.tick);
 
   /** Initialize state machine */
-  states_add(state_probe, state_two_enter, state_two_run, state_two_ext,
+  states_add(state_probe, NULL, state_one_run, NULL, state_first_e,
+             FIRST_STATE_NAME);
+  states_add(state_probe, state_two_enter, state_two_run, state_two_exit,
              state_second_e, SECOND_STATE_NAME);
   states_add(state_probe, NULL, state_three_run, NULL, state_third_e,
              THIRD_STATE_NAME);
-  states_add(state_probe, NULL, state_one_run, NULL, state_first_e,
-             FIRST_STATE_NAME);
 
   states_set_callback(statemachine_callback);
 
@@ -192,28 +199,26 @@ int main(int argc, char **argv) {
   create_timer(arguments.tick);
 
   error = pthread_mutex_lock(&mutex);
-  if (error = 0)
-    err_abort(error, "Lock mutex");
+
+  if (error != 0)
+    errno_abort(error, "Lock mutex");
 
   while (count < count_to) {
     /** Blocked thread can be awakened by a call to pthread_cond_signal */
     error =
         pthread_cond_wait(&cond, &mutex); /** Release mutex and block on cond */
     if (error != 0)
-      err_abort(error, "Wait on condition");
+      errno_abort(error, "Wait on condition");
   }
 
   error = pthread_mutex_unlock(&mutex);
   if (error != 0)
-    err_abort(error, "Unlock mutex");
+    errno_abort(error, "Unlock mutex");
 
   printf("Finshed\n");
 
-  return;
+
+  return -1;
 }
 
-void err_abort(int status, char *message) {
-  fprintf(stderr, "%s\n", message);
-  exit(status);
-  return 0;
-}
+
